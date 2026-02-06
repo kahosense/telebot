@@ -159,6 +159,9 @@ def main() -> None:
     openai_temperature = get_env_float("OPENAI_TEMPERATURE", 0.7)
     openai_max_tokens = get_env_int("OPENAI_MAX_TOKENS", 1000)
 
+    logging.info(f"Using model: {openai_model}")
+    logging.info(f"API base URL: {openai_base_url}")
+
     client = OpenAI(api_key=openai_api_key, base_url=openai_base_url)
 
     application = Application.builder().token(telegram_token).build()
