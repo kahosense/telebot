@@ -109,9 +109,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         response_text = await asyncio.to_thread(
             call_openai, client, prompt, model, temperature, max_tokens
         )
-    except Exception:
-        logging.exception("LLM request failed")
-        await update.message.reply_text("Translation failed. Please try again.")
+    except Exception as e:
+        logging.exception(f"LLM request failed: {type(e).__name__}: {str(e)}")
+        await update.message.reply_text(
+            "Translation failed. Please try again.\n"
+            f"Error: {type(e).__name__}"
+        )
         return
 
     if not response_text:
@@ -149,8 +152,13 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(message)s",
     )
 
+    # Load .env file if exists (local dev), Railway uses env vars directly
     env_path = os.path.join(os.path.dirname(__file__), ".env")
-    load_dotenv(env_path)
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        logging.info("Loaded .env file")
+    else:
+        logging.info("No .env file found, using environment variables")
 
     telegram_token = get_env_str("TELEGRAM_BOT_TOKEN")
     openai_api_key = get_env_str("OPENAI_API_KEY")
@@ -159,8 +167,16 @@ def main() -> None:
     openai_temperature = get_env_float("OPENAI_TEMPERATURE", 0.7)
     openai_max_tokens = get_env_int("OPENAI_MAX_TOKENS", 1000)
 
-    logging.info(f"Using model: {openai_model}")
-    logging.info(f"API base URL: {openai_base_url}")
+    # Log configuration
+    logging.info("=" * 50)
+    logging.info("TeleBot Configuration")
+    logging.info("=" * 50)
+    logging.info(f"Model: {openai_model}")
+    logging.info(f"API Base URL: {openai_base_url}")
+    logging.info(f"Temperature: {openai_temperature}")
+    logging.info(f"Max Tokens: {openai_max_tokens}")
+    logging.info(f"Deployment: {'Railway' if os.getenv('RAILWAY_ENVIRONMENT') else 'Local'}")
+    logging.info("=" * 50)
 
     client = OpenAI(api_key=openai_api_key, base_url=openai_base_url)
 
@@ -173,8 +189,48 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    logging.info("Bot started. Press Ctrl+C to stop.")
-    application.run_polling(close_loop=False)
+    # Auto-detect mode: Webhook for Railway (has PORT env), Polling for local
+    use_webhook = os.getenv("PORT") is not None
+
+    if use_webhook:
+        # Webhook mode for Railway Free Plan (Serverless compatible)
+        port = int(os.environ.get("PORT", 8000))
+        webhook_url = os.getenv("WEBHOOK_URL")
+
+        if not webhook_url:
+            # Auto-generate from Railway domain if available
+            railway_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN")
+            if railway_domain:
+                webhook_url = f"https://{railway_domain}/webhook"
+            else:
+                raise RuntimeError("WEBHOOK_URL or RAILWAY_PUBLIC_DOMAIN must be set for webhook mode")
+
+        logging.info("=" * 50)
+        logging.info("Starting bot in WEBHOOK mode")
+        logging.info(f"Port: {port}")
+        logging.info(f"Webhook URL: {webhook_url}")
+        logging.info("Mode: Railway Free Plan (Serverless compatible)")
+        logging.info("=" * 50)
+
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=port,
+            url_path="/webhook",
+            webhook_url=webhook_url,
+            drop_pending_updates=True,
+        )
+    else:
+        # Polling mode for local development
+        logging.info("=" * 50)
+        logging.info("Starting bot in POLLING mode")
+        logging.info("Mode: Local development")
+        logging.info("=" * 50)
+
+        application.run_polling(
+            close_loop=False,
+            drop_pending_updates=True,
+            allowed_updates=Update.ALL_TYPES,
+        )
 
 
 if __name__ == "__main__":
