@@ -9,7 +9,7 @@ from telegram import Update
 from telegram.constants import ChatAction
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
-PROMPT_TEMPLATE = """You are helping Louis practice spoken English by converting his daily logs
+PROMPT_TEMPLATE = """You are helping Louis practice spoken English by converting his Chinese input
 into natural, conversational English he would actually say out loud.
 
 CRITICAL: This is NOT translation. Generate how Louis would naturally express
@@ -19,15 +19,14 @@ Guidelines:
 - Sound like real speech, not written text
 - Keep it casual and natural (contractions, informal grammar OK)
 - Preserve the tone and feeling of each entry
-- Short entries can stay short ("Had beef brisket noodles yesterday")
-- Context-dependent entries (like "36mg") can stay as-is if unclear
+- Short input can stay short ("Had beef brisket noodles yesterday")
+- Context-dependent terms (like "36mg") can stay as-is if unclear
 - Place names can be romanized or kept in Chinese as he would say them
 - Match the original rhythm: short stays short, long stays long
-- Preserve any timestamp header lines exactly as-is (e.g. "Life Logging, [2026/2/2 08:46]")
-- Output one English entry per input entry, keep blank lines between entries
+- If input has multiple entries, keep one English entry per input entry with blank lines between them
 - Do NOT add new events or explanations
 
-Daily logs:
+Input:
 {user_message}
 
 Natural spoken English version:
