@@ -33,6 +33,29 @@ Natural spoken English version:
 """
 
 
+EN_TO_CN_PROMPT_TEMPLATE = """You are helping Louis practice Chinese by converting his English input
+into natural, conversational Chinese he would actually say out loud.
+
+CRITICAL: This is NOT formal translation. Generate how Louis would naturally express
+these thoughts in casual spoken Chinese (普通话口语), like texting a friend.
+
+Guidelines:
+- Sound like real speech, not written text
+- Keep it casual and natural (口语化表达)
+- Preserve the tone and feeling of the input
+- Short input can stay short ("昨天吃了牛腩面")
+- Use common spoken patterns (比如"还行吧"、"挺好的"、"搞定了")
+- Match the original rhythm: short stays short, long stays long
+- If input has multiple entries, keep one Chinese entry per input entry with blank lines between them
+- Do NOT add new events or explanations
+
+Input:
+{user_message}
+
+Natural spoken Chinese version:
+"""
+
+
 TOPIC_PROMPT_TEMPLATE = """请将以下日志转换成英文口语对话练习：
 
 {user_message}
@@ -140,8 +163,21 @@ B: "Pretty good actually. Reached out to him about doing some wedding design wor
 """
 
 
+def detect_language(text: str) -> str:
+    """Detect if input is primarily Chinese or English."""
+    chinese_chars = sum(1 for c in text if '\u4e00' <= c <= '\u9fff')
+    total_alpha = sum(1 for c in text if c.isalpha() or '\u4e00' <= c <= '\u9fff')
+    if total_alpha == 0:
+        return "zh"
+    return "zh" if chinese_chars / total_alpha > 0.3 else "en"
+
+
 def build_prompt(user_message: str) -> str:
     return PROMPT_TEMPLATE.format(user_message=user_message)
+
+
+def build_en_to_cn_prompt(user_message: str) -> str:
+    return EN_TO_CN_PROMPT_TEMPLATE.format(user_message=user_message)
 
 
 def build_topic_prompt(user_message: str) -> str:
@@ -229,6 +265,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     try:
         if mode == "topic":
             prompt = build_topic_prompt(user_message)
+        elif detect_language(user_message) == "en":
+            prompt = build_en_to_cn_prompt(user_message)
         else:
             prompt = build_prompt(user_message)
         response_text = await asyncio.to_thread(
