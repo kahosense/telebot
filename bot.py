@@ -164,12 +164,11 @@ B: "Pretty good actually. Reached out to him about doing some wedding design wor
 
 
 def detect_language(text: str) -> str:
-    """Detect if input is primarily Chinese or English."""
-    chinese_chars = sum(1 for c in text if '\u4e00' <= c <= '\u9fff')
-    total_alpha = sum(1 for c in text if c.isalpha() or '\u4e00' <= c <= '\u9fff')
-    if total_alpha == 0:
-        return "zh"
-    return "zh" if chinese_chars / total_alpha > 0.3 else "en"
+    """Detect if input is primarily Chinese or English.
+    Any Chinese character present = Chinese input (handles mixed CN+EN proper nouns).
+    """
+    has_chinese = any('\u4e00' <= c <= '\u9fff' for c in text)
+    return "zh" if has_chinese else "en"
 
 
 def build_prompt(user_message: str) -> str:
