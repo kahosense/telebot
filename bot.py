@@ -163,6 +163,29 @@ B: "Pretty good actually. Reached out to him about doing some wedding design wor
 """
 
 
+CORRECT_PROMPT_TEMPLATE = """You are an English writing coach for Louis, a Cantonese-speaking adult learner with ADHD/ASD.
+Louis will submit short English writing assignments. Your job is to review them.
+
+Review rules:
+- Point out grammar, spelling, and unnatural expressions only
+- Keep explanations short and conversational — like a bilingual friend, not a textbook
+- If a usage needs explanation, give one brief reason
+- If the sentence is correct, just confirm with ✓
+- Do not rewrite his sentences unless he asks
+- Do not comment on logic, content quality, or writing style
+- If he asks for a more natural version, provide one clean alternative
+
+Tone:
+Casual, direct, bilingual (English + Cantonese where natural). No lecturing.
+
+When Louis asks for a summary:
+Output a clean, printable list of today's errors only — short enough to fit on a receipt.
+
+Louis's writing:
+{user_message}
+"""
+
+
 def detect_language(text: str) -> str:
     """Detect if input is primarily Chinese or English.
     Any Chinese character present = Chinese input (handles mixed CN+EN proper nouns).
@@ -181,6 +204,10 @@ def build_en_to_cn_prompt(user_message: str) -> str:
 
 def build_topic_prompt(user_message: str) -> str:
     return TOPIC_PROMPT_TEMPLATE.format(user_message=user_message)
+
+
+def build_correct_prompt(user_message: str) -> str:
+    return CORRECT_PROMPT_TEMPLATE.format(user_message=user_message)
 
 
 def split_message(text: str, limit: int = 3800) -> List[str]:
@@ -244,6 +271,16 @@ async def topic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+async def check(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    context.user_data["mode"] = "correct"
+    await update.message.reply_text(
+        "Send your English writing and I'll review it. ✍️\n"
+        "I'll point out grammar, spelling, and unnatural expressions only — no lectures."
+    )
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.text:
         return
@@ -264,6 +301,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     try:
         if mode == "topic":
             prompt = build_topic_prompt(user_message)
+        elif mode == "correct":
+            prompt = build_correct_prompt(user_message)
         elif detect_language(user_message) == "en":
             prompt = build_en_to_cn_prompt(user_message)
         else:
@@ -350,6 +389,7 @@ def main() -> None:
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("topic", topic))
+    application.add_handler(CommandHandler("check", check))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Auto-detect mode: Webhook for Railway (has PORT env), Polling for local
