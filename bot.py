@@ -210,6 +210,21 @@ def build_correct_prompt(user_message: str) -> str:
     return CORRECT_PROMPT_TEMPLATE.format(user_message=user_message)
 
 
+CORRECT_MODE_TIMEOUT_SECONDS = 1800  # 30 minutes
+
+
+async def _correct_mode_timeout(app, bot, chat_id: int, user_id: int) -> None:
+    await asyncio.sleep(CORRECT_MODE_TIMEOUT_SECONDS)
+    user_data = app.user_data.get(user_id, {})
+    if user_data.get("mode") == "correct":
+        user_data.pop("mode", None)
+        user_data.pop("correct_timeout_task", None)
+        await bot.send_message(
+            chat_id=chat_id,
+            text=f"⏱ No activity for {CORRECT_MODE_TIMEOUT_SECONDS // 60} min — back to translation mode.",
+        )
+
+
 def split_message(text: str, limit: int = 3800) -> List[str]:
     if len(text) <= limit:
         return [text]
@@ -274,11 +289,28 @@ async def topic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def check(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
+    old_task: Optional[asyncio.Task] = context.user_data.pop("correct_timeout_task", None)
+    if old_task and not old_task.done():
+        old_task.cancel()
     context.user_data["mode"] = "correct"
-    await update.message.reply_text(
-        "Send your English writing and I'll review it. ✍️\n"
-        "I'll point out grammar, spelling, and unnatural expressions only — no lectures."
+    new_task = asyncio.create_task(
+        _correct_mode_timeout(context.application, context.bot, update.effective_chat.id, update.effective_user.id)
     )
+    context.user_data["correct_timeout_task"] = new_task
+    await update.message.reply_text(
+        "Check mode on. ✍️ Send your English writing and I'll review it.\n"
+        "Send /tl to switch back to translation mode."
+    )
+
+
+async def tl(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    old_task: Optional[asyncio.Task] = context.user_data.pop("correct_timeout_task", None)
+    if old_task and not old_task.done():
+        old_task.cancel()
+    context.user_data.pop("mode", None)
+    await update.message.reply_text("Translation mode.")
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -296,10 +328,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     temperature: float = context.application.bot_data["openai_temperature"]
     max_tokens: int = context.application.bot_data["openai_max_tokens"]
 
-    mode = context.user_data.pop("mode", None)
+    mode = context.user_data.get("mode")
+
+    if mode == "correct":
+        old_task: Optional[asyncio.Task] = context.user_data.pop("correct_timeout_task", None)
+        if old_task and not old_task.done():
+            old_task.cancel()
+        new_task = asyncio.create_task(
+            _correct_mode_timeout(context.application, context.bot, update.effective_chat.id, update.effective_user.id)
+        )
+        context.user_data["correct_timeout_task"] = new_task
 
     try:
         if mode == "topic":
+            context.user_data.pop("mode", None)
             prompt = build_topic_prompt(user_message)
         elif mode == "correct":
             prompt = build_correct_prompt(user_message)
@@ -390,6 +432,7 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("topic", topic))
     application.add_handler(CommandHandler("check", check))
+    application.add_handler(CommandHandler("tl", tl))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Auto-detect mode: Webhook for Railway (has PORT env), Polling for local
