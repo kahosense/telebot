@@ -266,7 +266,7 @@ def call_openai(client: OpenAI, prompt: str, model: str, temperature: float, max
         model=model,
         messages=[{"role": "user", "content": prompt}],
         temperature=temperature,
-        max_tokens=max_tokens,
+        max_completion_tokens=max_tokens,
     )
     content = response.choices[0].message.content or ""
     return content.strip()
